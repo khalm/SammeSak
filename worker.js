@@ -42,7 +42,7 @@ export default {
       ]) {
         try {
           const t0 = Date.now();
-          const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' }, redirect: 'manual' });
+          const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' }, redirect: 'manual', signal: AbortSignal.timeout(5000) });
           const t = await r.text();
           out[name] = { status: r.status, ms: Date.now() - t0, rss: /<rss[\s>]/i.test(t), json: t.trim().startsWith('{'), start: t.slice(0, 60), location: r.headers.get('location') || '' };
         } catch (e) { out[name] = { error: String(e) }; }
