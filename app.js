@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -366,4 +366,27 @@ $$('[data-version]').forEach(el => el.textContent = 'v' + APP_VERSION);
 })();
 renderHistory();
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+/* Oppdateringer: hent ny versjon automatisk */
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Ny versjon tok over: last inn på nytt (men ikke midt i et søk)
+    if (hadController && !reloaded && !current) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+  }).catch(() => {});
+}
+(async function checkVersion() {
+  try {
+    const info = await (await fetch('build-info.json', { cache: 'no-store' })).json();
+    if (info.version && info.version !== APP_VERSION && !sessionStorage.getItem('ss.reloadedFor' + info.version)) {
+      sessionStorage.setItem('ss.reloadedFor' + info.version, '1');
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => k.startsWith('sammesak-') && k !== 'sammesak-fonts').map(k => caches.delete(k)));
+      if (!current) location.reload();
+    }
+  } catch {}
+})();

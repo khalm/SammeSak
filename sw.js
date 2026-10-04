@@ -1,5 +1,5 @@
 // sw.js — gjør appen installerbar (kreves for at den skal dukke opp i Del-menyen)
-const VERSION = 'sammesak-1.2.0';
+const VERSION = 'sammesak-1.2.1';
 const CORE = ['./', 'index.html', 'style.css', 'config.js', 'paywall.js', 'search.js', 'app.js', 'manifest.json',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'favicon-48.png'];
 
@@ -25,7 +25,8 @@ self.addEventListener('fetch', (e) => {
   }
   // Egne filer: nett først (får oppdateringer), ellers lagret kopi. Nyhetssøk går alltid rett til nettet.
   if (url.origin === location.origin) {
-    e.respondWith(fetch(e.request).then(res => {
+    // cache: 'no-cache' = spør alltid GitHub om nyeste versjon (ellers kan telefonen bruke gamle filer i opptil 10 min)
+    e.respondWith(fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
       if (res.ok && !url.search) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
