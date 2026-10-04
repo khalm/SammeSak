@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SammeSak</title>
+  <meta name="description" content="Støtt på en sak bak betalingsmur? SammeSak finner den samme saken hos nyhetssteder der den er gratis.">
+  <meta name="theme-color" content="#16181d">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <button class="brand" id="homeBtn" type="button" aria-label="Til forsiden">
+      <img src="icon.svg" alt="" class="brand-logo">
+      <span>Samme<b>Sak</b></span>
+    </button>
+    <span class="ver-badge" data-version></span>
+    <button class="icon-btn" id="settingsBtn" type="button" aria-label="Innstillinger">⚙️</button>
+  </header>
+
+  <main>
+    <!-- FORSIDE -->
+    <section id="scr-home" class="screen active">
+      <div class="hero">
+        <h1>Bak betalingsmur?</h1>
+        <p class="lede">Finn den samme saken et annet sted – der den er gratis å lese.</p>
+      </div>
+
+      <form id="askForm" class="ask">
+        <label for="askInput" class="sr">Lenke eller overskrift</label>
+        <textarea id="askInput" rows="3" placeholder="Lim inn lenken til saken – eller skriv overskriften" autocomplete="off"></textarea>
+        <div class="row">
+          <button id="pasteBtn" class="btn ghost" type="button">📋 Lim inn</button>
+          <button class="btn primary" type="submit">Finn saken</button>
+        </div>
+      </form>
+
+      <div class="card tip" id="shareTip">
+        <b>Raskest:</b> Trykk <b>Del</b> på en sak i nettleseren og velg <b>SammeSak</b>.
+        <span id="installNote">Da må appen være installert først.</span>
+        <button id="installBtn" class="btn primary wide hidden" type="button">📲 Installer SammeSak</button>
+      </div>
+
+      <div id="historyBox" class="hidden">
+        <h3 class="sect">Siste søk</h3>
+        <ul id="historyList" class="history"></ul>
+      </div>
+
+      <p class="version muted small center">SammeSak <span data-version></span></p>
+    </section>
+
+    <!-- RESULTATER -->
+    <section id="scr-results" class="screen">
+      <div class="orig card">
+        <div class="orig-src" id="origSrc"></div>
+        <textarea id="origTitle" class="orig-title" rows="2" aria-label="Overskrift"></textarea>
+        <p class="muted small" id="origNote"></p>
+        <div class="chips-head small muted">Søkeord – trykk for å slå av/på:</div>
+        <div class="chips" id="chips"></div>
+        <div class="row">
+          <input id="addWord" class="add-word" type="text" placeholder="+ legg til ord" autocomplete="off">
+          <button id="againBtn" class="btn primary" type="button">🔎 Søk igjen</button>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+      <div id="results"></div>
+
+      <div class="card manual" id="manualBox">
+        <h3>Søk selv</h3>
+        <p class="muted small">Åpner et nyhetssøk med de samme ordene.</p>
+        <div class="links" id="manualLinks"></div>
+      </div>
+
+      <p class="version muted small center">SammeSak <span data-version></span></p>
+    </section>
+  </main>
+
+  <!-- INNSTILLINGER -->
+  <dialog id="settings">
+    <form method="dialog" class="sheet">
+      <h2>Innstillinger</h2>
+
+      <label class="field">
+        <span>Hvor langt tilbake skal det søkes?</span>
+        <select id="setDays">
+          <option value="1">Siste døgn</option>
+          <option value="3">Siste 3 dager</option>
+          <option value="7">Siste uke</option>
+          <option value="14">Siste 2 uker</option>
+          <option value="30">Siste måned</option>
+        </select>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="setPaywalled">
+        <span>Vis også treff som er bak betalingsmur</span>
+      </label>
+
+      <details class="adv">
+        <summary>Avansert: proxy for bedre treff</summary>
+        <p class="small muted">Med en gratis proxy på Cloudflare søker appen også i Google Nyheter og leser overskriften direkte fra lenken. Se README i GitHub for oppsett.</p>
+        <input id="setProxy" type="url" placeholder="https://sammesak.<navn>.workers.dev" autocomplete="off">
+        <p class="small muted" id="proxyInfo"></p>
+      </details>
+
+      <div class="row">
+        <button class="btn ghost" value="cancel" type="submit">Lukk</button>
+        <button class="btn primary" id="saveSettings" value="save" type="submit">Lagre</button>
+      </div>
+      <p class="small muted center">SammeSak <span data-version></span> · Søk via GDELT og Google Nyheter</p>
+    </form>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="paywall.js"></script>
+  <script src="search.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

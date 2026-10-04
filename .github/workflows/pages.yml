@@ -1,0 +1,47 @@
+# Publiserer appen på GitHub Pages og bygger inn proxy-adressen fra repoets Secrets (valgfritt).
+# Krever: Settings → Pages → Source: «GitHub Actions».
+name: Publiser appen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bygg inn proxy fra Secrets
+        env:
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const proxy = (process.env.PROXY_URL || "").trim();
+            fs.writeFileSync("config.js", "window.SAMMESAK_CONFIG = " + JSON.stringify({ proxy }) + ";\n");
+            const ver = (fs.readFileSync("app.js", "utf8").match(/APP_VERSION = .([\d.]+)/) || [])[1];
+            fs.writeFileSync("build-info.json", JSON.stringify({ version: ver, proxy: !!proxy, built: new Date().toISOString(), commit: process.env.GITHUB_SHA.slice(0, 7) }) + "\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, (proxy ? "✅ Proxy bygget inn" : "ℹ️ Ingen PROXY_URL – appen søker bare i GDELT") + " · versjon " + ver + "\n");
+          '
+          rm -rf .github worker.js
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
