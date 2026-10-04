@@ -51,6 +51,21 @@ export default {
       out.origin = request.headers.get('Origin');
       return json(out, 200, cors);
     }
+    // Feilsøking: test om en nyhetskilde svarer (bare kjente nyhetsadresser)
+    if (url.pathname === '/probe') {
+      const u = url.searchParams.get('u') || '';
+      let h = ''; try { h = new URL(u).hostname; } catch {}
+      if (!/(^|\.)(google\.com|bing\.com|gdeltproject\.org|duckduckgo\.com|nrk\.no|yahoo\.com|startpage\.com|brave\.com|qwant\.com|mojeek\.com)$/.test(h)) return json({ error: 'host' }, 400, cors);
+      const headers = {};
+      if (url.searchParams.get('ua') !== '0') headers['User-Agent'] = url.searchParams.get('ua') === 'bot' ? 'SammeSak/1.0 (+https://khalm.github.io/SammeSak/)' : UA;
+      if (url.searchParams.get('c') === '1') headers['Cookie'] = 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg';
+      const t0 = Date.now();
+      try {
+        const r = await fetch(u, { headers, redirect: url.searchParams.get('r') === '1' ? 'follow' : 'manual', signal: AbortSignal.timeout(8000) });
+        const t = await r.text();
+        return json({ status: r.status, ms: Date.now() - t0, len: t.length, rss: /<rss[\s>]/i.test(t), items: (t.match(/<item>/g) || []).length, start: t.slice(0, 200), location: r.headers.get('location') || '', ct: r.headers.get('content-type') }, 200, cors);
+      } catch (e) { return json({ error: String(e), ms: Date.now() - t0 }, 200, cors); }
+    }
     // Bare appen din får bruke proxyen
     if (url.pathname !== '/' && request.headers.get('Origin') !== ALLOWED_ORIGIN) {
       return new Response('Forbidden', { status: 403, headers: cors });
