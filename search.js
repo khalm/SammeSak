@@ -119,10 +119,13 @@ const WEAK = new Set(('announces announced warns warned plans calls called revea
 
 function extractKeywords(title, extra = '', max = 7) {
   const words = tokenize(title);
-  const seen = new Map();
+  // Ord som starter en setning (først, eller etter «:», «–», «.») har stor bokstav uansett – ikke tegn på navn
+  const starts = new Set();
+  String(title || '').split(/[:.!?–—|]\s+|\s+[-–—]\s+/).forEach(seg => { const f = tokenize(seg)[0]; if (f) starts.add(f); });
   // Overskrifter Med Stor Forbokstav I Hvert Ord (vanlig på engelsk) – da sier store bokstaver lite
-  const content = words.filter(w => !isStop(w) && /\p{L}/u.test(w));
+  const content = words.filter(w => !isStop(w) && /\p{L}/u.test(w) && !starts.has(w));
   const titleCase = content.length >= 4 && content.filter(w => /^\p{Lu}/u.test(w)).length / content.length > 0.7;
+  const seen = new Map();
   words.forEach((w, i) => {
     if (w.length < 3 && !/^\d+$/.test(w)) return;
     if (isStop(w)) return;
@@ -131,7 +134,7 @@ function extractKeywords(title, extra = '', max = 7) {
     let s = 1;
     const cap = /^\p{Lu}/u.test(w);
     const allCaps = w.length > 1 && w === w.toUpperCase() && /\p{L}/u.test(w);
-    if (cap && !titleCase && i > 0) s += 3;
+    if (cap && !titleCase && i > 0 && !starts.has(w)) s += 3;
     else if (cap) s += 1;
     if (WEAK.has(w.toLowerCase())) s -= 1.5;
     if (allCaps && w.length <= 6) s += 1.5; // forkortelser: NATO, FHI, DNB
@@ -140,8 +143,9 @@ function extractKeywords(title, extra = '', max = 7) {
     if (/\d/.test(w)) s += w.length >= 3 ? 0.8 : 0;
     if (/^(19|20)\d\d$/.test(w)) s -= 0.8; // årstall sier lite
     s -= i * 0.02; // tidlig i tittelen = litt viktigere
+    const isName = cap && !titleCase && i > 0 && !starts.has(w);
     const prev = seen.get(key);
-    if (!prev || prev.score < s) seen.set(key, { word: w, score: s });
+    if (!prev || prev.score < s) seen.set(key, { word: w, score: s, name: isName });
   });
   // Ord fra ingress/beskrivelse kan styrke ord som også står i tittelen
   if (extra) {
@@ -150,7 +154,7 @@ function extractKeywords(title, extra = '', max = 7) {
   }
   const list = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, max);
   const onCount = Math.min(4, list.length);
-  return list.map((k, i) => ({ word: k.word, score: Math.round(k.score * 10) / 10, on: i < onCount }));
+  return list.map((k, i) => ({ word: k.word, score: Math.round(k.score * 10) / 10, on: i < onCount, name: !!k.name }));
 }
 
 /* ---------- Treff og poeng ---------- */
@@ -309,6 +313,19 @@ function parseNewsRss(xml) {
   }).filter(a => a.title && a.url && !/^(news\.google|www\.bing)\./.test(a.host));
 }
 
+/** Samlet søk via egen proxy: flere Bing-søk, rettet mot gratis nettsteder, pluss NRKs nyeste saker. */
+async function searchProxy(proxy, { q, q2, names, lang }) {
+  const params = new URLSearchParams({ q, q2: q2 || '', names: names || '', lang });
+  const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/search?' + params, 15000);
+  if (!res.ok) throw new NetError('proxy svarte ' + res.status);
+  const data = await res.json();
+  return (data.items || []).map(it => ({
+    title: it.title, url: it.url, host: hostOf(it.url), source: it.source || '',
+    desc: it.desc || '', date: it.date ? new Date(it.date) : null,
+    via: it.via === 'NRK' ? 'NRK' : 'Bing Nyheter',
+  })).filter(a => a.title && a.url && a.host);
+}
+
 /** Henter overskrift og ingress fra saken (betalingssider viser dette også uten abonnement). */
 async function fetchMeta(url, proxy = '') {
   if (!url) return null;
@@ -364,22 +381,36 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
 
   const gdeltSpan = timespanDays <= 1 ? '1d' : timespanDays <= 3 ? '3d' : timespanDays <= 7 ? '1w' : timespanDays <= 14 ? '2w' : '1m';
 
+  const names = keywords.filter(k => k.on && k.name).map(k => k.word).slice(0, 3);
+
+  // Med egen proxy: ett samlet søk (Bing + gratis nettsteder + NRK). Google og GDELT blokkerer Cloudflare.
+  if (proxy) {
+    onProgress('Søker i nyheter …');
+    try {
+      let r = await searchProxy(proxy, { q: active.join(' '), q2: active.slice(0, 2).join(' '), names: names.length >= 2 ? names.join(' ') : '', lang });
+      used.push('Bing Nyheter'); if (r.some(a => a.via === 'NRK')) used.push('NRK');
+      add(r);
+      if (good() < 2 && active.length > 3) {
+        onProgress('Utvider søket …');
+        add(await searchProxy(proxy, { q: active.slice(0, 3).join(' '), q2: active.slice(1, 3).join(' '), names: '', lang }).catch(() => []));
+      }
+    } catch (e) { errors.push('Proxy: ' + e.message); }
+  }
   // 1) Google Nyheter – best dekning, særlig av norske medier
-  const gn = (async () => {
+  const gn = proxy ? Promise.resolve() : (async () => {
     onProgress('Søker i nyheter …');
     try {
       let r = await searchGoogleNews(active, { lang, days: timespanDays, proxy });
       used.push(proxy ? 'Bing Nyheter' : 'Google Nyheter');
       if (r.length < 3 && active.length > 2) r = r.concat(await searchGoogleNews(active.slice(0, 2), { lang, days: timespanDays, proxy }).catch(() => []));
       // Norsk sak: se også etter navnene i internasjonale medier – og omvendt
-      const names = keywords.filter(k => k.on && /^\p{Lu}/u.test(k.word)).map(k => k.word).slice(0, 3);
       if (names.length >= 2) r = r.concat(await searchGoogleNews(names, { lang: lang === 'nb' ? 'en' : 'nb', days: timespanDays, proxy }).catch(() => []));
       add(r);
     } catch (e) { errors.push('Nyhetssøk: ' + e.message); }
   })();
 
   // 2) GDELT – smalt søk først, så bredere hvis det gir få treff
-  const gd = (async () => {
+  const gd = proxy ? Promise.resolve() : (async () => {
     const steps = [active];
     if (active.length > 3) steps.push(active.slice(0, 3));
     if (active.length > 2) steps.push(active.slice(0, 2));

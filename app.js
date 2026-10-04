@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -151,6 +151,7 @@ function hitHtml(a) {
       <span>· ${esc(timeAgo(a.date))}</span>
     </div>
     <div class="hit-title">${esc(a.title)}</div>
+    ${a.desc ? `<div class="hit-desc">${esc(a.desc)}</div>` : ''}
     <div class="hit-meta">${statusTag(a.status)}<span class="tag match${strong ? ' strong' : ''}">${strong ? '✓ Trolig samme sak' : 'Mulig samme sak'}</span></div>
   </a>`;
 }

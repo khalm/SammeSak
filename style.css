@@ -193,3 +193,6 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .steps li { margin: 4px 0; }
 .adv[open] summary { margin-bottom: 6px; }
 .empty .btn { margin-top: 12px; }
+
+.hit-desc { color: var(--muted); font-size: .88rem; line-height: 1.4; margin: -2px 0 8px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
