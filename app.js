@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -78,6 +78,16 @@ async function run() {
       onProgress: (t) => { if (id === searchId) setStatus(t, true); },
     });
     if (id !== searchId) return;
+    // Overskriften var gjettet fra lenken, men søket fant selve saken: bruk den ekte overskriften og søk på nytt
+    if (c.fromSlug && out.origTitle) {
+      const t = cleanTitle(out.origTitle, c.host);
+      if (t) {
+        c.title = t; c.fromSlug = false;
+        c.keywords = extractKeywords(t, c.desc);
+        renderOrig(); addHistory(c);
+        return run();
+      }
+    }
     renderResults(out);
   } catch (e) {
     if (id !== searchId) return;
@@ -105,7 +115,7 @@ function renderOrig() {
   const ta = $('#origTitle');
   ta.value = c.title;
   autosize(ta);
-  $('#origNote').textContent = c.fromSlug ? 'Overskriften er gjettet ut fra lenken – rett den gjerne.' : '';
+  $('#origNote').textContent = c.fromSlug ? 'Fant ikke overskriften, så den er gjettet ut fra lenken. Rett den gjerne for bedre treff.' : '';
   renderChips();
 }
 

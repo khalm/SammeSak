@@ -342,6 +342,7 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
   const errors = [];
   const used = [];
   const all = new Map();
+  let origTitle = '';
   const origHost = cleanDomain(host);
   const origPath = (() => { try { const u = new URL(url); return u.hostname.replace(/^www\./, '') + u.pathname; } catch { return ''; } })();
 
@@ -349,9 +350,10 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
     for (const a of list) {
       const h = cleanDomain(a.host);
       if (!h) continue;
-      if (origHost && (h === origHost || h.endsWith('.' + origHost))) continue; // samme avis
       const key = a.url.replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '');
-      if (origPath && key.startsWith(origPath)) continue;
+      // Selve saken dukket opp i søket – da vet vi den ekte overskriften
+      if (origPath && key.replace(/\/$/, '') === origPath.replace(/\/$/, '')) { if (!origTitle) origTitle = a.title; continue; }
+      if (origHost && (h === origHost || h.endsWith('.' + origHost))) continue; // samme avis
       if (all.has(key)) continue;
       if (a.date && Date.now() - a.date > (timespanDays + 1) * 86400000) continue; // for gammel
       const score = matchScore(keywords, title, a.title, a.desc || '');
@@ -398,7 +400,7 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
   const results = [...all.values()]
     .filter(a => a.score >= 0.28)
     .sort((a, b) => (rank[a.status] - rank[b.status]) || (b.score - a.score) || ((b.date || 0) - (a.date || 0)));
-  return { results, errors: [...new Set(errors)], used, lang };
+  return { results, errors: [...new Set(errors)], used, lang, origTitle };
 }
 
 /** Lenker for å søke selv (virker alltid). */
