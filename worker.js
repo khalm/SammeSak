@@ -69,23 +69,26 @@ export default {
 
       if (url.pathname === '/search') {
         // Samlet nyhetssøk: flere Bing-søk (bredt + rettet mot gratis nettsteder) og NRKs nyeste saker
-        const q = (url.searchParams.get('q') || '').trim();
+        // q kan gis flere ganger: første er det fulle søket, resten er kortere kombinasjoner
+        const qs = [...new Set(url.searchParams.getAll('q').map(x => x.trim()).filter(Boolean))].slice(0, 6);
         const q2 = (url.searchParams.get('q2') || '').trim();
+        if (q2 && !qs.includes(q2)) qs.splice(1, 0, q2);
         const names = (url.searchParams.get('names') || '').trim();
         const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'nb';
-        if (!q) return json({ items: [] }, 400, cors);
+        if (!qs.length) return json({ items: [] }, 400, cors);
         const jobs = [];
         const bing = (query, mkt) => jobs.push(bingSearch(query, mkt));
         if (lang === 'nb') {
-          bing(q, 'nb-NO'); if (q2 && q2 !== q) bing(q2, 'nb-NO');
-          bing(q + ' site:nrk.no', 'nb-NO'); if (q2 && q2 !== q) bing(q2 + ' site:nrk.no', 'nb-NO');
-          bing(q + ' site:tv2.no', 'nb-NO');
-          if (names) { bing(names, 'en-US'); bing(names + ' site:bbc.com', 'en-US'); }
-          jobs.push(nrkFeeds(q + ' ' + q2));
+          qs.forEach(x => bing(x, 'nb-NO'));
+          qs.slice(0, 3).forEach(x => bing(x + ' site:nrk.no', 'nb-NO'));
+          bing(qs[0] + ' site:tv2.no', 'nb-NO');
+          if (names.split(/\s+/).length >= 2) { bing(names, 'en-US'); bing(names + ' site:bbc.com', 'en-US'); }
+          jobs.push(nrkFeeds(qs.join(' ')));
         } else {
-          bing(q, 'en-US'); if (q2 && q2 !== q) bing(q2, 'en-US');
-          for (const site of ['bbc.com', 'theguardian.com', 'apnews.com', 'reuters.com']) bing(q + ' site:' + site, 'en-US');
-          if (names) bing(names, 'nb-NO');
+          qs.forEach(x => bing(x, 'en-US'));
+          for (const site of ['bbc.com', 'theguardian.com', 'apnews.com', 'reuters.com']) bing(qs[0] + ' site:' + site, 'en-US');
+          if (qs[1]) for (const site of ['bbc.com', 'theguardian.com']) bing(qs[1] + ' site:' + site, 'en-US');
+          if (names.split(/\s+/).length >= 2) bing(names, 'nb-NO');
         }
         const lists = await Promise.allSettled(jobs);
         const seen = new Set(), items = [];

@@ -314,8 +314,9 @@ function parseNewsRss(xml) {
 }
 
 /** Samlet søk via egen proxy: flere Bing-søk, rettet mot gratis nettsteder, pluss NRKs nyeste saker. */
-async function searchProxy(proxy, { q, q2, names, lang }) {
-  const params = new URLSearchParams({ q, q2: q2 || '', names: names || '', lang });
+async function searchProxy(proxy, { queries, names, lang }) {
+  const params = new URLSearchParams({ names: names || '', lang });
+  for (const q of queries) params.append('q', q);
   const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/search?' + params, 15000);
   if (!res.ok) throw new NetError('proxy svarte ' + res.status);
   const data = await res.json();
@@ -387,13 +388,13 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
   if (proxy) {
     onProgress('Søker i nyheter …');
     try {
-      let r = await searchProxy(proxy, { q: active.join(' '), q2: active.slice(0, 2).join(' '), names: names.length >= 2 ? names.join(' ') : '', lang });
-      used.push('Bing Nyheter'); if (r.some(a => a.via === 'NRK')) used.push('NRK');
+      // Søkemotorer krever ofte at alle ordene finnes. Derfor søkes det også på par av de viktigste ordene.
+      const a = active;
+      const queries = [a.join(' ')];
+      for (const [i, j] of [[0, 1], [0, 2], [1, 2], [0, 3]]) if (a[i] && a[j]) queries.push(a[i] + ' ' + a[j]);
+      const r = await searchProxy(proxy, { queries, names: names.join(' '), lang });
+      used.push('Bing Nyheter'); if (r.some(x => x.via === 'NRK')) used.push('NRK');
       add(r);
-      if (good() < 2 && active.length > 3) {
-        onProgress('Utvider søket …');
-        add(await searchProxy(proxy, { q: active.slice(0, 3).join(' '), q2: active.slice(1, 3).join(' '), names: '', lang }).catch(() => []));
-      }
     } catch (e) { errors.push('Proxy: ' + e.message); }
   }
   // 1) Google Nyheter – best dekning, særlig av norske medier
