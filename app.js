@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -170,7 +170,10 @@ function renderResults({ results, errors, used }) {
       <div class="big">${noSource ? '📡' : '🔍'}</div>
       <h2>${noSource ? 'Fikk ikke kontakt med nyhetssøket' : 'Fant ingen gratis versjon'}</h2>
       <p class="muted">${noSource
-        ? 'Nyhetssøkene svarte ikke akkurat nå. Prøv igjen om litt, eller bruk «Søk selv» under. For et stabilt søk kan du sette opp en gratis proxy (se README i GitHub).'
+        ? (proxyUrl()
+          ? 'Proxyen din svarte ikke. Sjekk adressen under ⚙️ Innstillinger, eller bruk «Søk selv» under.'
+          : 'Nettleseren får ikke lov til å lese nyhetssøkene direkte, og de gratis mellomleddene svarte ikke. Sett opp din egen gratis proxy – det tar ca. 5 minutter og gjør søket stabilt.')
+        + (proxyUrl() ? '' : '<br><button type="button" class="btn primary" data-open-settings>⚙️ Sett opp gratis proxy</button>')
         : 'Det kan være en egen sak bare denne avisen har. Prøv å slå av et søkeord, søke lenger tilbake i tid, eller søk selv under.'}</p>
     </div>` + html;
   }
@@ -291,7 +294,9 @@ $('#settingsBtn').addEventListener('click', () => {
   $('#setDays').value = String(settings.days);
   $('#setPaywalled').checked = settings.showPaywalled;
   $('#setProxy').value = settings.proxy;
-  $('#proxyInfo').textContent = CFG.proxy ? 'En proxy er allerede bygget inn i appen. Feltet over er bare for å overstyre den.' : '';
+  $('#proxyInfo').textContent = CFG.proxy ? 'En proxy er allerede bygget inn i appen. Feltet over er bare for å overstyre den.'
+    : settings.proxy ? '' : 'Ingen proxy satt opp ennå.';
+  $('#proxyBox').open = !proxyUrl();
   $('#settings').showModal();
 });
 $('#settings').addEventListener('close', () => {
@@ -301,6 +306,31 @@ $('#settings').addEventListener('close', () => {
   settings.proxy = $('#setProxy').value.trim();
   save('settings', settings);
   if (current && $('#scr-results').classList.contains('active')) run();
+});
+
+/* Proxy: kopier kode og test */
+$('#results').addEventListener('click', (e) => { if (e.target.closest('[data-open-settings]')) $('#settingsBtn').click(); });
+$('#copyWorker').addEventListener('click', async () => {
+  const b = $('#copyWorker');
+  try {
+    const code = await (await fetch('worker.js', { cache: 'no-store' })).text();
+    await navigator.clipboard.writeText(code);
+    b.textContent = '✅ Kopiert – lim inn i Cloudflare';
+  } catch { b.textContent = '⚠️ Klarte ikke å kopiere – åpne worker.js i GitHub'; }
+  setTimeout(() => { b.textContent = '📋 Kopier proxy-koden'; }, 4000);
+});
+$('#testProxy').addEventListener('click', async () => {
+  const url = $('#setProxy').value.trim().replace(/\/$/, '');
+  const info = $('#proxyInfo');
+  if (!/^https:\/\/.+/.test(url)) { info.textContent = 'Lim inn adressen først (https://…workers.dev).'; return; }
+  info.textContent = 'Tester …';
+  try {
+    const res = await fetchWithTimeout(url + '/news?q=Norge&hl=no&gl=NO&ceid=NO:no', 15000);
+    const txt = await res.text();
+    if (res.status === 403) info.textContent = '❌ Proxyen svarer, men avviser appen. Sjekk at ALLOWED_ORIGIN i koden er https://khalm.github.io.';
+    else if (/<rss[\s>]/i.test(txt)) info.textContent = '✅ Proxyen virker! Trykk Lagre.';
+    else info.textContent = '❌ Fikk svar, men ikke nyheter. Har du limt inn hele koden og trykket Deploy?';
+  } catch { info.textContent = '❌ Fikk ikke kontakt. Sjekk adressen, og at du trykket Deploy.'; }
 });
 
 /* Installering */

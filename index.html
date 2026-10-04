@@ -109,11 +109,22 @@
         <span>Vis også treff som er bak betalingsmur</span>
       </label>
 
-      <details class="adv">
-        <summary>Avansert: proxy for bedre treff</summary>
-        <p class="small muted">Med en gratis proxy på Cloudflare søker appen også i Google Nyheter og leser overskriften direkte fra lenken. Se README i GitHub for oppsett.</p>
-        <input id="setProxy" type="url" placeholder="https://sammesak.<navn>.workers.dev" autocomplete="off">
-        <p class="small muted" id="proxyInfo"></p>
+      <details class="adv" id="proxyBox">
+        <summary>Egen gratis proxy (anbefalt)</summary>
+        <p class="small">Nettlesere får ikke lov til å lese Google Nyheter direkte. En egen proxy på Cloudflare er gratis, tar ca. 5 minutter og gjør søket stabilt.</p>
+        <ol class="steps small">
+          <li>Trykk <b>Kopier proxy-koden</b> under.</li>
+          <li>Åpne <a href="https://dash.cloudflare.com/sign-up/workers-and-pages" target="_blank" rel="noopener">dash.cloudflare.com</a> og lag en gratis konto (eller logg inn).</li>
+          <li>Gå til <b>Workers &amp; Pages → Create → Hello World</b>. Gi den navnet <b>sammesak</b> og trykk <b>Deploy</b>.</li>
+          <li>Trykk <b>Edit code</b>, slett alt, lim inn koden og trykk <b>Deploy</b>.</li>
+          <li>Kopier adressen (slutter på <b>.workers.dev</b>), lim den inn her og trykk <b>Test</b>.</li>
+        </ol>
+        <button id="copyWorker" class="btn wide" type="button">📋 Kopier proxy-koden</button>
+        <div class="row">
+          <input id="setProxy" type="url" placeholder="https://sammesak.<navn>.workers.dev" autocomplete="off">
+          <button id="testProxy" class="btn" type="button" style="flex:0 0 auto">Test</button>
+        </div>
+        <p class="small" id="proxyInfo"></p>
       </details>
 
       <div class="row">

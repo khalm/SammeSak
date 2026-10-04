@@ -188,3 +188,8 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 .check input { width: 22px; height: 22px; flex: none; }
 .adv { margin: 14px 0; }
 .adv summary { cursor: pointer; font-weight: 600; }
+
+.steps { padding-left: 1.2rem; margin: 8px 0; }
+.steps li { margin: 4px 0; }
+.adv[open] summary { margin-bottom: 6px; }
+.empty .btn { margin-top: 12px; }

@@ -35,9 +35,9 @@ jobs:
             fs.writeFileSync("config.js", "window.SAMMESAK_CONFIG = " + JSON.stringify({ proxy }) + ";\n");
             const ver = (fs.readFileSync("app.js", "utf8").match(/APP_VERSION = .([\d.]+)/) || [])[1];
             fs.writeFileSync("build-info.json", JSON.stringify({ version: ver, proxy: !!proxy, built: new Date().toISOString(), commit: process.env.GITHUB_SHA.slice(0, 7) }) + "\n");
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, (proxy ? "✅ Proxy bygget inn" : "ℹ️ Ingen PROXY_URL – appen søker bare i GDELT") + " · versjon " + ver + "\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, (proxy ? "✅ Proxy bygget inn" : "ℹ️ Ingen PROXY_URL – appen bruker offentlige mellomledd eller proxy fra innstillingene") + " · versjon " + ver + "\n");
           '
-          rm -rf .github worker.js
+          rm -rf .github
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
