@@ -1,5 +1,5 @@
 // sw.js — gjør appen installerbar (kreves for at den skal dukke opp i Del-menyen)
-const VERSION = 'sammesak-1.5.0';
+const VERSION = 'sammesak-1.5.1';
 const CORE = ['./', 'index.html', 'style.css', 'config.js', 'paywall.js', 'search.js', 'app.js', 'manifest.json',
   'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'favicon-48.png'];
 

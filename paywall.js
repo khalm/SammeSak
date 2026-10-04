@@ -46,7 +46,7 @@ const PAYWALL_LIST = {
     'budstikka.no', 'dt.no', 'varden.no', 'laagendalsposten.no', 'tvedestrandsposten.no', 'lofotposten.no',
     'vol.no', 'avisa-hordaland.no', 'sunnmorsposten.no', 'rbnett.no', 'tk.no',
     'avisenagder.no', 'moss-avis.no', 'f-b.no', 'sa.no', 'ga.no', 'jarlsbergavis.no', 'gjengangeren.no',
-    'helgelendingen.no', 'banett.no', 'an.no', 'ranablad.no', 'fremover.no', 'hardanger-folkeblad.no',
+    'helgelendingen.no', 'folkebladet.no', 'avisa-nordland.no', 'an.no', 'opp.no', 'nordlys.no', 'altaposten.no', 'finnmarkdagblad.no', 'sortlandsavis.no', 'vesteraalen.no', 'banett.no', 'an.no', 'ranablad.no', 'fremover.no', 'hardanger-folkeblad.no',
     'kvinnheringen.no', 'haugesunds-avis.no', 'h-a.no', 'sandnesposten.no', 'jbl.no', 'dalane-tidende.no',
     'fjt.no', 'firda.no', 'firdaposten.no', 'sognavis.no', 'porsgrunnsdagblad.no', 'kv.no', 'retten.no',
     'tidens-krav.no', 'driva.no', 'namdalsavisa.no', 'tronderavisa.no', 'tronderbladet.no', 'innherred.no',
