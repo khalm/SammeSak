@@ -45,7 +45,7 @@ export default {
       try {
         const r = await fetch(u, { headers, redirect: url.searchParams.get('r') === '1' ? 'follow' : 'manual', signal: AbortSignal.timeout(8000) });
         const t = await r.text();
-        return json({ status: r.status, ms: Date.now() - t0, len: t.length, rss: /<rss[\s>]/i.test(t), items: (t.match(/<item>/g) || []).length, sources: [...t.matchAll(/<item>[\s\S]*?<title>([^<]*)<\/title>[\s\S]*?<News:Source>([^<]*)<\/News:Source>/g)].map(m => m[2] + ' | ' + m[1].slice(0, 70)), start: t.slice(0, 300), titles: [...t.matchAll(/<title>(?:<!\[CDATA\[)?([^<\]]*)/g)].slice(0, 8).map(m => m[1].slice(0, 60)), location: r.headers.get('location') || '', ct: r.headers.get('content-type') }, 200, cors);
+        return json({ status: r.status, ms: Date.now() - t0, len: t.length, rss: /<rss[\s>]/i.test(t), items: (t.match(/<item>/g) || []).length, sources: [...t.matchAll(/<item>[\s\S]*?<title>([^<]*)<\/title>[\s\S]*?<News:Source>([^<]*)<\/News:Source>/g)].map(m => m[2] + ' | ' + m[1].slice(0, 70)), start: t.slice(0, 300), find: url.searchParams.get('f') ? [...t.matchAll(new RegExp(url.searchParams.get('f'), 'g'))].slice(0, +(url.searchParams.get('n') || 5)).map(m => t.slice(m.index, m.index + +(url.searchParams.get('len') || 400))) : undefined, titles: [...t.matchAll(/<title>(?:<!\[CDATA\[)?([^<\]]*)/g)].slice(0, 8).map(m => m[1].slice(0, 60)), location: r.headers.get('location') || '', ct: r.headers.get('content-type') }, 200, cors);
       } catch (e) { return json({ error: String(e), ms: Date.now() - t0 }, 200, cors); }
     }
     // Bare appen din får bruke proxyen
