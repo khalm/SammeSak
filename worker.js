@@ -25,6 +25,7 @@ export default {
       'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Max-Age': '86400',
+      'Access-Control-Expose-Headers': 'X-Source',
       'Vary': 'Origin',
     };
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
@@ -37,12 +38,29 @@ export default {
     }
     try {
       if (url.pathname === '/news') {
+        const q = url.searchParams.get('q') || '';
         const p = new URLSearchParams();
         for (const k of ['q', 'hl', 'gl', 'ceid']) if (url.searchParams.get(k)) p.set(k, url.searchParams.get(k));
-        const res = await fetch('https://news.google.com/rss/search?' + p, {
-          headers: { 'User-Agent': UA }, cf: { cacheTtl: 600, cacheEverything: true },
-        });
-        return new Response(await res.text(), { status: res.status, headers: { ...cors, 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'max-age=600' } });
+        // Google viser en samtykkeside til europeiske servere – disse informasjonskapslene hopper over den
+        let xml = '', src = 'google';
+        try {
+          const res = await fetch('https://news.google.com/rss/search?' + p, {
+            headers: { 'User-Agent': UA, 'Accept': 'application/rss+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' },
+            redirect: 'manual', cf: { cacheTtl: 600, cacheEverything: true },
+          });
+          if (res.status === 200) xml = await res.text();
+        } catch {}
+        // Reserve: Bing Nyheter (RSS)
+        if (!/<rss[\s>]/i.test(xml)) {
+          src = 'bing';
+          const mkt = url.searchParams.get('hl') === 'no' ? 'nb-NO' : 'en-US';
+          const res = await fetch('https://www.bing.com/news/search?' + new URLSearchParams({ q: q.replace(/\s*when:\d+d\s*/i, ' ').trim(), format: 'rss', mkt, setlang: mkt.slice(0, 2) }), {
+            headers: { 'User-Agent': UA }, cf: { cacheTtl: 600, cacheEverything: true },
+          });
+          xml = await res.text();
+        }
+        return new Response(xml, { status: 200, headers: { ...cors, 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'max-age=600', 'X-Source': src } });
       }
 
       if (url.pathname === '/gdelt') {
@@ -88,7 +106,7 @@ export default {
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 502, cors);
     }
-    return new Response('SammeSak-proxy er oppe ✓', { status: 200, headers: cors });
+    return new Response('SammeSak-proxy v2 er oppe ✓', { status: 200, headers: cors });
   },
 };
 

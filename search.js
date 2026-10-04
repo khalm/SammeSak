@@ -284,21 +284,27 @@ async function searchGoogleNews(words, { lang = 'nb', days = 7, proxy = '' } = {
 
 function parseNewsRss(xml) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml');
-  return [...doc.querySelectorAll('item')].map(it => {
-    const src = it.querySelector('source');
-    const srcName = src ? src.textContent.trim() : '';
-    let title = (it.querySelector('title')?.textContent || '').trim();
+  const isBing = /bing\.com/i.test(xml.slice(0, 2000));
+  return [...doc.getElementsByTagName('item')].map(it => {
+    const tag = (n) => (it.getElementsByTagName(n)[0]?.textContent || '').trim();
+    const src = it.getElementsByTagName('source')[0];
+    let link = tag('link');
+    // Bing pakker lenken inn i en omvei: …apiclick.aspx?…&url=https%3a%2f%2f…
+    try { const real = new URL(link).searchParams.get('url'); if (real && /^https?:/i.test(real)) link = real; } catch {}
+    const srcName = src ? src.textContent.trim() : tag('News:Source');
+    let title = tag('title');
     if (srcName && title.endsWith(' - ' + srcName)) title = title.slice(0, -(srcName.length + 3));
-    const pub = it.querySelector('pubDate')?.textContent;
+    const pub = tag('pubDate');
     return {
       title,
-      url: (it.querySelector('link')?.textContent || '').trim(),
-      host: src ? hostOf(src.getAttribute('url')) : '',
+      url: link,
+      host: src && src.getAttribute('url') ? hostOf(src.getAttribute('url')) : hostOf(link),
       source: srcName,
+      desc: isBing ? tag('description') : '',
       date: pub ? new Date(pub) : null,
-      via: 'Google Nyheter',
+      via: isBing ? 'Bing Nyheter' : 'Google Nyheter',
     };
-  }).filter(a => a.title && a.url);
+  }).filter(a => a.title && a.url && !/^(news\.google|www\.bing)\./.test(a.host));
 }
 
 /** Henter overskrift og ingress fra saken (betalingssider viser dette også uten abonnement). */
@@ -363,7 +369,8 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
       const names = keywords.filter(k => k.on && /^\p{Lu}/u.test(k.word)).map(k => k.word).slice(0, 3);
       if (names.length >= 2) r = r.concat(await searchGoogleNews(names, { lang: lang === 'nb' ? 'en' : 'nb', days: timespanDays, proxy }).catch(() => []));
       add(r);
-    } catch (e) { errors.push('Google Nyheter: ' + e.message); }
+      if (r.length && r.every(a => a.via === 'Bing Nyheter')) used[used.indexOf('Google Nyheter')] = 'Bing Nyheter';
+    } catch (e) { errors.push('Nyhetssøk: ' + e.message); }
   })();
 
   // 2) GDELT – smalt søk først, så bredere hvis det gir få treff
