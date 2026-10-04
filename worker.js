@@ -35,18 +35,19 @@ export default {
     // Statussjekk (viser bare om kildene svarer, ikke innhold)
     if (url.pathname === '/status') {
       const out = {};
-      for (const [name, u] of [
+      const only = url.searchParams.get('s');
+      await Promise.all([
         ['google', 'https://news.google.com/rss/search?q=Norge&hl=no&gl=NO&ceid=NO:no'],
         ['bing', 'https://www.bing.com/news/search?q=Norge&format=rss&mkt=nb-NO'],
         ['gdelt', 'https://api.gdeltproject.org/api/v2/doc/doc?query=Norway&mode=artlist&maxrecords=3&format=json&timespan=1d'],
-      ]) {
+      ].filter(([n]) => !only || n === only).map(async ([name, u]) => {
+        const t0 = Date.now();
         try {
-          const t0 = Date.now();
-          const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' }, redirect: 'manual', signal: AbortSignal.timeout(5000) });
+          const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' }, redirect: 'manual', signal: AbortSignal.timeout(4000) });
           const t = await r.text();
           out[name] = { status: r.status, ms: Date.now() - t0, rss: /<rss[\s>]/i.test(t), json: t.trim().startsWith('{'), start: t.slice(0, 60), location: r.headers.get('location') || '' };
-        } catch (e) { out[name] = { error: String(e) }; }
-      }
+        } catch (e) { out[name] = { error: String(e), ms: Date.now() - t0 }; }
+      }));
       out.origin = request.headers.get('Origin');
       return json(out, 200, cors);
     }
