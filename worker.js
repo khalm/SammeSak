@@ -12,11 +12,12 @@
 //   6. Actions → Publiser appen → Run workflow
 //
 // Proxyen svarer bare appen din (ALLOWED_ORIGIN) og bare på tre adresser:
-//   /news?q=…   Google Nyheter (RSS)
+//   /news?q=…   nyhetssøk (Bing Nyheter, RSS)
 //   /meta?url=… overskrift og ingress fra en sak (det som vises før betalingsmuren)
 //   /gdelt?…    GDELT-søk
 
 const ALLOWED_ORIGIN = 'https://khalm.github.io';
+const BOT_UA = 'SammeSak/1.0 (+https://khalm.github.io/SammeSak/)';
 const UA = 'Mozilla/5.0 (Linux; Android 14; Pixel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
 
 export default {
@@ -32,25 +33,6 @@ export default {
     if (request.method !== 'GET') return new Response('Method not allowed', { status: 405, headers: cors });
 
     const url = new URL(request.url);
-    // Statussjekk (viser bare om kildene svarer, ikke innhold)
-    if (url.pathname === '/status') {
-      const out = {};
-      const only = url.searchParams.get('s');
-      await Promise.all([
-        ['google', 'https://news.google.com/rss/search?q=Norge&hl=no&gl=NO&ceid=NO:no'],
-        ['bing', 'https://www.bing.com/news/search?q=Norge&format=rss&mkt=nb-NO'],
-        ['gdelt', 'https://api.gdeltproject.org/api/v2/doc/doc?query=Norway&mode=artlist&maxrecords=3&format=json&timespan=1d'],
-      ].filter(([n]) => !only || n === only).map(async ([name, u]) => {
-        const t0 = Date.now();
-        try {
-          const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' }, redirect: 'manual', signal: AbortSignal.timeout(4000) });
-          const t = await r.text();
-          out[name] = { status: r.status, ms: Date.now() - t0, rss: /<rss[\s>]/i.test(t), json: t.trim().startsWith('{'), start: t.slice(0, 60), location: r.headers.get('location') || '' };
-        } catch (e) { out[name] = { error: String(e), ms: Date.now() - t0 }; }
-      }));
-      out.origin = request.headers.get('Origin');
-      return json(out, 200, cors);
-    }
     // Feilsøking: test om en nyhetskilde svarer (bare kjente nyhetsadresser)
     if (url.pathname === '/probe') {
       const u = url.searchParams.get('u') || '';
@@ -72,34 +54,20 @@ export default {
     }
     try {
       if (url.pathname === '/news') {
-        const q = url.searchParams.get('q') || '';
-        const p = new URLSearchParams();
-        for (const k of ['q', 'hl', 'gl', 'ceid']) if (url.searchParams.get(k)) p.set(k, url.searchParams.get(k));
-        // Google viser en samtykkeside til europeiske servere – disse informasjonskapslene hopper over den
-        let xml = '', src = 'google';
-        try {
-          const res = await fetch('https://news.google.com/rss/search?' + p, {
-            headers: { 'User-Agent': UA, 'Accept': 'application/rss+xml,application/xml;q=0.9,*/*;q=0.8',
-              'Cookie': 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg' },
-            redirect: 'manual', cf: { cacheTtl: 600, cacheEverything: true },
-          });
-          if (res.status === 200) xml = await res.text();
-        } catch {}
-        // Reserve: Bing Nyheter (RSS)
-        if (!/<rss[\s>]/i.test(xml)) {
-          src = 'bing';
-          const mkt = url.searchParams.get('hl') === 'no' ? 'nb-NO' : 'en-US';
-          const res = await fetch('https://www.bing.com/news/search?' + new URLSearchParams({ q: q.replace(/\s*when:\d+d\s*/i, ' ').trim(), format: 'rss', mkt, setlang: mkt.slice(0, 2) }), {
-            headers: { 'User-Agent': UA }, cf: { cacheTtl: 600, cacheEverything: true },
-          });
-          xml = await res.text();
-        }
-        return new Response(xml, { status: 200, headers: { ...cors, 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'max-age=600', 'X-Source': src } });
+        // Google blokkerer Cloudflare-servere, så nyhetssøket går via Bing Nyheter (RSS).
+        // Bing gir bare RSS når den ikke later som den er en nettleser.
+        const q = (url.searchParams.get('q') || '').replace(/\s*when:\d+d\s*/i, ' ').trim();
+        const mkt = url.searchParams.get('hl') === 'no' ? 'nb-NO' : 'en-US';
+        const res = await fetch('https://www.bing.com/news/search?' + new URLSearchParams({ q, format: 'rss', mkt, setlang: mkt.slice(0, 2) }), {
+          headers: { 'User-Agent': BOT_UA }, signal: AbortSignal.timeout(8000), cf: { cacheTtl: 600, cacheEverything: true },
+        });
+        const xml = await res.text();
+        return new Response(xml, { status: res.status, headers: { ...cors, 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'max-age=600', 'X-Source': 'bing' } });
       }
 
       if (url.pathname === '/gdelt') {
         const res = await fetch('https://api.gdeltproject.org/api/v2/doc/doc?' + url.searchParams, {
-          headers: { 'User-Agent': UA }, cf: { cacheTtl: 600, cacheEverything: true },
+          headers: { 'User-Agent': BOT_UA }, signal: AbortSignal.timeout(7000), cf: { cacheTtl: 600, cacheEverything: true },
         });
         return new Response(await res.text(), { status: res.status, headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' } });
       }
@@ -109,7 +77,7 @@ export default {
         if (!/^https?:\/\//i.test(target)) return json({ error: 'bad url' }, 400, cors);
         const res = await fetch(target, {
           headers: { 'User-Agent': UA, 'Accept': 'text/html', 'Accept-Language': 'nb-NO,nb;q=0.9,no;q=0.8,en;q=0.6' },
-          redirect: 'follow', cf: { cacheTtl: 3600, cacheEverything: true },
+          redirect: 'follow', signal: AbortSignal.timeout(8000), cf: { cacheTtl: 3600, cacheEverything: true },
         });
         // Les bare starten av siden – metadata står i <head>
         const reader = res.body.getReader();
@@ -140,7 +108,7 @@ export default {
     } catch (e) {
       return json({ error: String(e && e.message || e) }, 502, cors);
     }
-    return new Response('SammeSak-proxy v2 er oppe ✓', { status: 200, headers: cors });
+    return new Response('SammeSak-proxy v3 er oppe ✓', { status: 200, headers: cors });
   },
 };
 

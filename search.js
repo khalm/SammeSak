@@ -216,7 +216,8 @@ async function getText(url, { proxyUrl = '', direct = true, ok = () => true, tim
   const attempts = [];
   if (proxyUrl) attempts.push({ name: 'proxy', url: proxyUrl });
   if (direct) attempts.push({ name: 'direct', url });
-  for (const r of relayOrder()) attempts.push({ name: r.name, url: r.make(url), relay: true });
+  // Med egen proxy hoppes de offentlige mellomleddene over (de er trege og ofte nede)
+  if (!proxyUrl) for (const r of relayOrder()) attempts.push({ name: r.name, url: r.make(url), relay: true });
   let lastErr = null;
   for (const a of attempts) {
     try {
@@ -250,8 +251,9 @@ async function searchGdelt(words, { timespan = '1w', proxy = '', max = 75 } = {}
   lastGdelt = Date.now();
   const txt = await getText('https://api.gdeltproject.org/api/v2/doc/doc?' + params, {
     proxyUrl: proxy ? proxy.replace(/\/$/, '') + '/gdelt?' + params : '',
+    direct: !proxy,
     ok: (t) => { const s = t.trim(); return s === '' || s.startsWith('{'); },
-    timeout: 12000,
+    timeout: proxy ? 9000 : 12000,
   });
   const data = txt.trim() ? JSON.parse(txt) : {};
   return (data.articles || []).map(a => ({
@@ -315,6 +317,7 @@ async function fetchMeta(url, proxy = '') {
       const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/meta?url=' + encodeURIComponent(url), 12000);
       if (res.ok) { const j = await res.json(); if (j && j.title) return j; }
     } catch {}
+    return null; // egen proxy klarte det ikke – de offentlige mellomleddene klarer det heller ikke
   }
   const html = await getText(url, { direct: false, ok: (t) => /<meta/i.test(t), timeout: 9000 });
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -350,6 +353,7 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
       const key = a.url.replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '');
       if (origPath && key.startsWith(origPath)) continue;
       if (all.has(key)) continue;
+      if (a.date && Date.now() - a.date > (timespanDays + 1) * 86400000) continue; // for gammel
       const score = matchScore(keywords, title, a.title, a.desc || '');
       all.set(key, { ...a, host: h, score, status: paywallStatus(h) });
     }
@@ -360,16 +364,15 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
 
   // 1) Google Nyheter – best dekning, særlig av norske medier
   const gn = (async () => {
-    onProgress('Søker i Google Nyheter …');
+    onProgress('Søker i nyheter …');
     try {
       let r = await searchGoogleNews(active, { lang, days: timespanDays, proxy });
-      used.push('Google Nyheter');
+      used.push(proxy ? 'Bing Nyheter' : 'Google Nyheter');
       if (r.length < 3 && active.length > 2) r = r.concat(await searchGoogleNews(active.slice(0, 2), { lang, days: timespanDays, proxy }).catch(() => []));
       // Norsk sak: se også etter navnene i internasjonale medier – og omvendt
       const names = keywords.filter(k => k.on && /^\p{Lu}/u.test(k.word)).map(k => k.word).slice(0, 3);
       if (names.length >= 2) r = r.concat(await searchGoogleNews(names, { lang: lang === 'nb' ? 'en' : 'nb', days: timespanDays, proxy }).catch(() => []));
       add(r);
-      if (r.length && r.every(a => a.via === 'Bing Nyheter')) used[used.indexOf('Google Nyheter')] = 'Bing Nyheter';
     } catch (e) { errors.push('Nyhetssøk: ' + e.message); }
   })();
 

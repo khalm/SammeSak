@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -328,7 +328,7 @@ $('#testProxy').addEventListener('click', async () => {
     const res = await fetchWithTimeout(url + '/news?q=Norge&hl=no&gl=NO&ceid=NO:no', 15000);
     const txt = await res.text();
     if (res.status === 403) info.textContent = '❌ Proxyen svarer, men avviser appen. Sjekk at ALLOWED_ORIGIN i koden er https://khalm.github.io.';
-    else if (/<rss[\s>]/i.test(txt)) info.textContent = '✅ Proxyen virker' + (res.headers.get('X-Source') === 'bing' ? ' (via Bing Nyheter)' : '') + '! Trykk Lagre.';
+    else if (/<rss[\s>]/i.test(txt)) info.textContent = '✅ Proxyen virker! Trykk Lagre.';
     else if (/oppe ✓/.test(txt)) info.textContent = '❌ Proxyen kjører gammel kode. Kopier proxy-koden på nytt, lim inn i Cloudflare og trykk Deploy.';
     else info.textContent = '❌ Fikk svar, men ikke nyheter (' + res.status + ': ' + txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) + '). Kopier proxy-koden på nytt og trykk Deploy i Cloudflare.';
   } catch { info.textContent = '❌ Fikk ikke kontakt. Sjekk adressen, og at du trykket Deploy.'; }
