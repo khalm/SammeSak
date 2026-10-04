@@ -1,4 +1,6 @@
-# Publiserer appen på GitHub Pages og bygger inn proxy-adressen fra repoets Secrets (valgfritt).
+# Publiserer appen på GitHub Pages.
+# Hvis repoet har secret CLOUDFLARE_API_TOKEN, legges også proxyen (worker.js) ut på Cloudflare automatisk,
+# og adressen bygges inn i appen – ingen innliming av kode nødvendig.
 # Krever: Settings → Pages → Source: «GitHub Actions».
 name: Publiser appen
 
@@ -17,7 +19,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  proxy:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.url.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Finn Cloudflare-konto
+        id: acct
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ]; then echo "skip=1" >> $GITHUB_OUTPUT; echo "ℹ️ Ingen CLOUDFLARE_API_TOKEN – proxyen legges ikke ut automatisk" >> $GITHUB_STEP_SUMMARY; exit 0; fi
+          if [ -z "$ACCOUNT" ]; then
+            ACCOUNT=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.cloudflare.com/client/v4/accounts | jq -r '.result[0].id // empty')
+          fi
+          if [ -z "$ACCOUNT" ]; then echo "::error::Fant ikke Cloudflare-kontoen. Sjekk at nøkkelen er laget med malen «Edit Cloudflare Workers»."; exit 1; fi
+          echo "id=$ACCOUNT" >> $GITHUB_OUTPUT
+
+      - name: Legg ut proxyen på Cloudflare
+        if: steps.acct.outputs.skip != '1'
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ steps.acct.outputs.id }}
+          command: deploy worker.js --name sammesak --compatibility-date 2025-01-01
+
+      - name: Proxy-adresse
+        id: url
+        if: steps.acct.outputs.skip != '1'
+        env:
+          OUT: ${{ steps.deploy.outputs.command-output }}
+          DEP: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          URL="$DEP"
+          if [ -z "$URL" ]; then URL=$(printf '%s' "$OUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' | head -1); fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "✅ Proxy lagt ut: $URL" >> $GITHUB_STEP_SUMMARY
+
   deploy:
+    needs: proxy
+    if: always()
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -25,17 +70,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Bygg inn proxy fra Secrets
+      - name: Bygg inn proxy-adressen
         env:
           PROXY_URL: ${{ secrets.PROXY_URL }}
+          AUTO_URL: ${{ needs.proxy.outputs.url }}
         run: |
           node -e '
             const fs = require("fs");
-            const proxy = (process.env.PROXY_URL || "").trim();
+            const proxy = (process.env.AUTO_URL || process.env.PROXY_URL || "").trim();
             fs.writeFileSync("config.js", "window.SAMMESAK_CONFIG = " + JSON.stringify({ proxy }) + ";\n");
             const ver = (fs.readFileSync("app.js", "utf8").match(/APP_VERSION = .([\d.]+)/) || [])[1];
             fs.writeFileSync("build-info.json", JSON.stringify({ version: ver, proxy: !!proxy, built: new Date().toISOString(), commit: process.env.GITHUB_SHA.slice(0, 7) }) + "\n");
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, (proxy ? "✅ Proxy bygget inn" : "ℹ️ Ingen PROXY_URL – appen bruker offentlige mellomledd eller proxy fra innstillingene") + " · versjon " + ver + "\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, (proxy ? "✅ Proxy bygget inn: " + proxy : "ℹ️ Ingen proxy bygget inn") + " · versjon " + ver + "\n");
           '
           rm -rf .github
 
