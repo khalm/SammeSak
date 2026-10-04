@@ -60,9 +60,10 @@
 
     <!-- RESULTATER -->
     <section id="scr-results" class="screen">
+      <button id="newTop" class="back" type="button">← Ny sak</button>
       <div class="orig card">
         <div class="orig-src" id="origSrc"></div>
-        <textarea id="origTitle" class="orig-title" rows="2" aria-label="Overskrift"></textarea>
+        <textarea id="origTitle" class="orig-title" rows="1" aria-label="Overskrift"></textarea>
         <p class="muted small" id="origNote"></p>
         <div class="chips-head small muted">Søkeord – trykk for å slå av/på:</div>
         <div class="chips" id="chips"></div>
@@ -80,6 +81,8 @@
         <p class="muted small">Åpner et nyhetssøk med de samme ordene.</p>
         <div class="links" id="manualLinks"></div>
       </div>
+
+      <button id="newBottom" class="btn primary wide" type="button">🔄 Søk på en annen sak</button>
 
       <p class="version muted small center">SammeSak <span data-version></span></p>
     </section>

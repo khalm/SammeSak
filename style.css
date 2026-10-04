@@ -106,11 +106,15 @@ textarea { resize: vertical; }
 .version { margin-top: 26px; }
 
 /* Original sak */
-.orig { margin-top: 16px; }
+.back {
+  background: none; border: 0; color: var(--ink); font: 600 1rem/1 Inter, sans-serif;
+  padding: 16px 2px 2px; cursor: pointer;
+}
+.orig { margin-top: 10px; }
 .orig-src { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .85rem; color: var(--muted); }
 .orig-title {
   margin-top: 8px; border: 0; padding: 0; background: transparent; resize: none;
-  font: 700 1.3rem/1.2 Newsreader, Georgia, serif; overflow: hidden;
+  font: 700 1.3rem/1.2 Newsreader, Georgia, serif; overflow: hidden; field-sizing: content; min-height: 0;
 }
 .orig-title:focus { border: 0; box-shadow: inset 0 -2px 0 var(--accent); }
 #origNote:empty { display: none; }

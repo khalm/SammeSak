@@ -27,9 +27,7 @@ Appen omgår ikke betalingsmurer – den finner bare andre som har skrevet om de
 2. **Actions → Publiser appen → Run workflow** (skjer også automatisk ved hver endring).
 
 ## Valgfritt: bedre treff med gratis proxy
-Uten noe oppsett søker appen i [GDELT](https://www.gdeltproject.org/) (gratis nyhetssøk fra hele verden). Med en gratis proxy på Cloudflare får du i tillegg:
-- søk i **Google Nyheter** (mye bedre dekning av norske medier)
-- ekte overskrift hentet fra lenken (ikke bare gjettet fra adressen)
+Uten noe oppsett søker appen i **Google Nyheter** og [GDELT](https://www.gdeltproject.org/) via gratis offentlige mellomledd (allorigins, codetabs, corsproxy), fordi nettlesere ikke får lese disse direkte. De kan av og til være trege eller nede. Med din egen gratis proxy på Cloudflare blir søket raskere og mer stabilt, og søkeordene går ikke via andres tjenester.
 
 Oppsett (kan gjøres på mobilen): følg stegene øverst i [`worker.js`](worker.js). Til slutt legger du adressen inn som secret `PROXY_URL` i repoet og kjører **Publiser appen** på nytt. Du kan også lime adressen inn under ⚙️ **Innstillinger → Avansert** i appen.
 

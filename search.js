@@ -1,7 +1,7 @@
 // search.js — finner nøkkelord i en sak og leter etter samme sak hos andre nyheter.
 // Kilder:
 //   • GDELT (gratis, ingen nøkkel) – søker i nyheter fra hele verden
-//   • Google Nyheter (via valgfri gratis proxy, se worker.js) – best dekning av norske nyheter
+//   • Google Nyheter – best dekning av norske nyheter (via egen proxy eller gratis offentlige mellomledd)
 
 /* ---------- Tekst ---------- */
 
@@ -189,18 +189,51 @@ async function fetchWithTimeout(url, ms = 15000, opts = {}) {
   finally { clearTimeout(t); }
 }
 
-/** GDELT bruker JSONP som reserve hvis nettleseren blokkerer vanlig oppslag. */
-function jsonp(url, ms = 15000) {
-  return new Promise((resolve, reject) => {
-    const cb = '__ss_cb' + Math.random().toString(36).slice(2);
-    const s = document.createElement('script');
-    const done = (fn, v) => { clearTimeout(t); delete window[cb]; s.remove(); fn(v); };
-    const t = setTimeout(() => done(reject, new Error('timeout')), ms);
-    window[cb] = (data) => done(resolve, data);
-    s.onerror = () => done(reject, new Error('jsonp'));
-    s.src = url + '&callback=' + cb;
-    document.head.appendChild(s);
-  });
+/*
+ * Nettlesere får ikke lese Google Nyheter og de fleste nettsider direkte (CORS).
+ * Derfor prøver vi i rekkefølge: egen proxy (hvis satt opp) → direkte → gratis offentlige mellomledd.
+ * Mellomleddet som virker, huskes og prøves først neste gang.
+ */
+const RELAYS = [
+  { name: 'allorigins', make: (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  { name: 'codetabs', make: (u) => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u) },
+  { name: 'corsproxy', make: (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
+];
+const relayBad = new Set();
+function relayOrder() {
+  let best = '';
+  try { best = localStorage.getItem('ss.relay') || ''; } catch {}
+  return [...RELAYS].sort((a, b) => (b.name === best) - (a.name === best)).filter(r => !relayBad.has(r.name));
+}
+
+class NetError extends Error {}
+
+/**
+ * Henter tekst fra url. ok(tekst) sjekker at svaret er det vi ventet (ikke en feilside).
+ * proxyUrl: adresse på egen proxy for samme oppslag (valgfritt).
+ */
+async function getText(url, { proxyUrl = '', direct = true, ok = () => true, timeout = 10000 } = {}) {
+  const attempts = [];
+  if (proxyUrl) attempts.push({ name: 'proxy', url: proxyUrl });
+  if (direct) attempts.push({ name: 'direct', url });
+  for (const r of relayOrder()) attempts.push({ name: r.name, url: r.make(url), relay: true });
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      const res = await fetchWithTimeout(a.url, timeout);
+      const txt = await res.text();
+      if (res.status === 429 || /limit requests/i.test(txt.slice(0, 300))) throw new Error('rate');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!ok(txt)) throw new Error('uventet svar');
+      if (a.relay) { try { localStorage.setItem('ss.relay', a.name); } catch {} }
+      return txt;
+    } catch (e) {
+      lastErr = e;
+      // Et mellomledd som ikke svarer i det hele tatt, hoppes over resten av økten
+      if (a.relay && (e.name === 'AbortError' || e instanceof TypeError)) relayBad.add(a.name);
+    }
+  }
+  throw new NetError(lastErr && lastErr.message === 'rate' ? 'for mange søk – vent litt' : 'fikk ikke kontakt');
 }
 
 let lastGdelt = 0;
@@ -215,41 +248,20 @@ async function searchGdelt(words, { timespan = '1w', proxy = '', max = 75 } = {}
   const wait = 5300 - (Date.now() - lastGdelt);
   if (wait > 0) await sleep(wait);
   lastGdelt = Date.now();
-
-  const direct = 'https://api.gdeltproject.org/api/v2/doc/doc?' + params;
-  let data = null, err = null;
-  const tries = [];
-  if (proxy) tries.push(() => fetchWithTimeout(proxy.replace(/\/$/, '') + '/gdelt?' + params).then(parseGdeltRes));
-  tries.push(() => fetchWithTimeout(direct).then(parseGdeltRes));
-  if (typeof document !== 'undefined') {
-    const jp = new URLSearchParams(params); jp.set('format', 'jsonp');
-    tries.push(() => jsonp('https://api.gdeltproject.org/api/v2/doc/doc?' + jp));
-  }
-  for (const t of tries) {
-    try { data = await t(); if (data) break; } catch (e) { err = e; }
-  }
-  if (!data) throw err || new Error('GDELT svarte ikke');
+  const txt = await getText('https://api.gdeltproject.org/api/v2/doc/doc?' + params, {
+    proxyUrl: proxy ? proxy.replace(/\/$/, '') + '/gdelt?' + params : '',
+    ok: (t) => { const s = t.trim(); return s === '' || s.startsWith('{'); },
+    timeout: 12000,
+  });
+  const data = txt.trim() ? JSON.parse(txt) : {};
   return (data.articles || []).map(a => ({
     title: (a.title || '').trim(),
     url: a.url,
     host: hostOf(a.url) || a.domain,
     date: parseGdeltDate(a.seendate),
     lang: a.language,
-    image: a.socialimage || '',
     via: 'GDELT',
   })).filter(a => a.title && a.url);
-}
-
-async function parseGdeltRes(res) {
-  const txt = await res.text();
-  if (!res.ok) throw new Error('GDELT ' + res.status);
-  const t = txt.trim();
-  if (!t.startsWith('{')) {
-    if (/limit requests/i.test(t)) throw new Error('GDELT: for mange søk – vent litt');
-    if (!t) return { articles: [] };
-    throw new Error('GDELT: ' + t.slice(0, 120));
-  }
-  return JSON.parse(t);
 }
 
 function parseGdeltDate(s) {
@@ -257,15 +269,17 @@ function parseGdeltDate(s) {
   return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null;
 }
 
-/** Søk i Google Nyheter via proxy (RSS). */
-async function searchGoogleNews(words, { lang = 'nb', days = 7, proxy } = {}) {
-  if (!proxy) return [];
+/** Søk i Google Nyheter (RSS). */
+async function searchGoogleNews(words, { lang = 'nb', days = 7, proxy = '' } = {}) {
   const q = words.join(' ') + ` when:${days}d`;
   const loc = lang === 'en' ? { hl: 'en-US', gl: 'US', ceid: 'US:en' } : { hl: 'no', gl: 'NO', ceid: 'NO:no' };
   const params = new URLSearchParams({ q, ...loc });
-  const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/news?' + params);
-  if (!res.ok) throw new Error('Google Nyheter ' + res.status);
-  return parseNewsRss(await res.text());
+  const txt = await getText('https://news.google.com/rss/search?' + params, {
+    proxyUrl: proxy ? proxy.replace(/\/$/, '') + '/news?' + params : '',
+    direct: false, // Google tillater aldri direkte oppslag fra nettleser
+    ok: (t) => /<rss[\s>]/i.test(t),
+  });
+  return parseNewsRss(txt);
 }
 
 function parseNewsRss(xml) {
@@ -287,12 +301,22 @@ function parseNewsRss(xml) {
   }).filter(a => a.title && a.url);
 }
 
-/** Henter tittel og ingress fra saken (krever proxy – betalingssider viser dette også uten abonnement). */
-async function fetchMeta(url, proxy) {
-  if (!proxy || !url) return null;
-  const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/meta?url=' + encodeURIComponent(url), 12000);
-  if (!res.ok) return null;
-  return res.json();
+/** Henter overskrift og ingress fra saken (betalingssider viser dette også uten abonnement). */
+async function fetchMeta(url, proxy = '') {
+  if (!url) return null;
+  if (proxy) {
+    try {
+      const res = await fetchWithTimeout(proxy.replace(/\/$/, '') + '/meta?url=' + encodeURIComponent(url), 12000);
+      if (res.ok) { const j = await res.json(); if (j && j.title) return j; }
+    } catch {}
+  }
+  const html = await getText(url, { direct: false, ok: (t) => /<meta/i.test(t), timeout: 9000 });
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const meta = (k) => (doc.querySelector(`meta[property="${k}"],meta[name="${k}"]`)?.getAttribute('content') || '').trim();
+  return {
+    title: meta('og:title') || meta('twitter:title') || (doc.title || '').trim(),
+    description: meta('og:description') || meta('description') || meta('twitter:description'),
+  };
 }
 
 function hostOf(u) { try { return new URL(u).hostname; } catch { return ''; } }
@@ -324,23 +348,23 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
       all.set(key, { ...a, host: h, score, status: paywallStatus(h) });
     }
   };
+  const good = () => [...all.values()].filter(a => a.score >= 0.45).length;
 
   const gdeltSpan = timespanDays <= 1 ? '1d' : timespanDays <= 3 ? '3d' : timespanDays <= 7 ? '1w' : timespanDays <= 14 ? '2w' : '1m';
 
-  // 1) Google Nyheter (hvis proxy) – gå i gang med en gang
-  const gn = proxy ? (async () => {
+  // 1) Google Nyheter – best dekning, særlig av norske medier
+  const gn = (async () => {
     onProgress('Søker i Google Nyheter …');
     try {
       let r = await searchGoogleNews(active, { lang, days: timespanDays, proxy });
-      if (r.length < 3 && active.length > 2) r = r.concat(await searchGoogleNews(active.slice(0, 2), { lang, days: timespanDays, proxy }));
-      if (lang === 'nb') {
-        // Norske navn i internasjonale medier
-        const names = keywords.filter(k => k.on && /^\p{Lu}/u.test(k.word)).map(k => k.word).slice(0, 3);
-        if (names.length >= 2) r = r.concat(await searchGoogleNews(names, { lang: 'en', days: timespanDays, proxy }).catch(() => []));
-      }
-      add(r); used.push('Google Nyheter');
-    } catch (e) { errors.push(e.message); }
-  })() : Promise.resolve();
+      used.push('Google Nyheter');
+      if (r.length < 3 && active.length > 2) r = r.concat(await searchGoogleNews(active.slice(0, 2), { lang, days: timespanDays, proxy }).catch(() => []));
+      // Norsk sak: se også etter navnene i internasjonale medier – og omvendt
+      const names = keywords.filter(k => k.on && /^\p{Lu}/u.test(k.word)).map(k => k.word).slice(0, 3);
+      if (names.length >= 2) r = r.concat(await searchGoogleNews(names, { lang: lang === 'nb' ? 'en' : 'nb', days: timespanDays, proxy }).catch(() => []));
+      add(r);
+    } catch (e) { errors.push('Google Nyheter: ' + e.message); }
+  })();
 
   // 2) GDELT – smalt søk først, så bredere hvis det gir få treff
   const gd = (async () => {
@@ -349,14 +373,13 @@ async function findSameStory({ title, url, host, keywords, timespanDays = 7, pro
     if (active.length > 2) steps.push(active.slice(0, 2));
     let found = 0;
     for (let i = 0; i < steps.length; i++) {
-      onProgress(i === 0 ? 'Søker i nyheter fra hele verden …' : 'Utvider søket …');
+      if (i > 0) onProgress('Utvider søket …');
       try {
         const r = await searchGdelt(steps[i], { timespan: gdeltSpan, proxy });
         const before = all.size; add(r); found += all.size - before;
         if (!used.includes('GDELT')) used.push('GDELT');
-      } catch (e) { errors.push(e.message); if (/svarte ikke|Failed to fetch|NetworkError|jsonp|timeout/i.test(e.message)) break; }
-      const good = [...all.values()].filter(a => a.score >= 0.45).length;
-      if (good >= 3 || found >= 8) break;
+      } catch (e) { errors.push('GDELT: ' + e.message); break; }
+      if (good() >= 3 || found >= 8) break;
     }
   })();
 

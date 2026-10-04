@@ -1,5 +1,5 @@
 // app.js — skjermer, deling og visning av treff
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -24,7 +24,7 @@ function show(name) {
   window.scrollTo(0, 0);
 }
 window.addEventListener('popstate', () => {
-  if ($('#scr-results').classList.contains('active')) { searchId++; $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-home')); renderHistory(); }
+  if ($('#scr-results').classList.contains('active')) { searchId++; current = null; $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-home')); renderHistory(); }
 });
 
 /* ---------- Start et søk ---------- */
@@ -34,11 +34,12 @@ async function start(shared) {
   current = { url: p.url, host: p.host, title: p.title, fromSlug: p.fromSlug, desc: '', keywords: extractKeywords(p.title) };
   show('results');
   renderOrig();
-  // Med proxy: hent ekte overskrift og ingress fra saken
-  if (p.url && proxyUrl()) {
+  // Hent ekte overskrift og ingress fra saken (når overskriften bare er gjettet fra lenken, eller med egen proxy)
+  if (p.url && (p.fromSlug || !p.title || proxyUrl())) {
     setStatus('Leser overskriften …', true);
     try {
-      const meta = await fetchMeta(p.url, proxyUrl());
+      const meta = await Promise.race([fetchMeta(p.url, proxyUrl()), sleep(9000).then(() => null)]);
+      if (current.url !== p.url) return; // brukeren har gått videre
       if (meta && meta.title) {
         const t = cleanTitle(meta.title, p.host);
         if (t && (p.fromSlug || !p.title || t.length > p.title.length * 0.6)) {
@@ -169,13 +170,13 @@ function renderResults({ results, errors, used }) {
       <div class="big">${noSource ? '📡' : '🔍'}</div>
       <h2>${noSource ? 'Fikk ikke kontakt med nyhetssøket' : 'Fant ingen gratis versjon'}</h2>
       <p class="muted">${noSource
-        ? 'Sjekk nettet, eller sett opp proxy under ⚙️ Innstillinger for et sikrere søk.'
+        ? 'Nyhetssøkene svarte ikke akkurat nå. Prøv igjen om litt, eller bruk «Søk selv» under. For et stabilt søk kan du sette opp en gratis proxy (se README i GitHub).'
         : 'Det kan være en egen sak bare denne avisen har. Prøv å slå av et søkeord, søke lenger tilbake i tid, eller søk selv under.'}</p>
     </div>` + html;
   }
 
   if (errors.length && !used.length) {
-    html += `<p class="small muted">Feil: ${esc(errors.join(' · '))}</p>`;
+    html += `<p class="small muted center">Detaljer: ${esc(errors.join(' · '))}</p>`;
   } else if (used.length) {
     html += `<p class="small muted center">Søkt i ${esc(used.join(' og '))} · siste ${settings.days === 1 ? 'døgn' : settings.days + ' dager'}</p>`;
   }
@@ -189,7 +190,12 @@ function renderManual() {
     .map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.name)}</a>`).join('');
 }
 
-function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+function autosize(ta) {
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+  fit(); requestAnimationFrame(fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+}
+window.addEventListener('resize', () => { const ta = $('#origTitle'); if (ta.offsetParent) autosize(ta); });
 
 function flash(msg) {
   const el = $('#askInput');
@@ -230,10 +236,18 @@ $('#pasteBtn').addEventListener('click', async () => {
   $('#askInput').focus();
   $('#askInput').placeholder = 'Hold fingeren her og velg «Lim inn»';
 });
-$('#homeBtn').addEventListener('click', () => {
-  if (history.state && history.state.r) { history.back(); return; }
-  searchId++; show('home'); renderHistory();
-});
+/** Tilbake til forsiden for å søke på en ny sak */
+function newSearch() {
+  searchId++; current = null;
+  if (history.state && history.state.r) history.back();
+  $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-home'));
+  renderHistory(); setStatus(''); $('#results').innerHTML = '';
+  $('#askInput').value = '';
+  window.scrollTo(0, 0);
+}
+$('#homeBtn').addEventListener('click', newSearch);
+$('#newTop').addEventListener('click', newSearch);
+$('#newBottom').addEventListener('click', newSearch);
 
 $('#chips').addEventListener('click', (e) => {
   const b = e.target.closest('.chip'); if (!b) return;
