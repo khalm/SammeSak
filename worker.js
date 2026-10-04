@@ -37,7 +37,7 @@ export default {
     if (url.pathname === '/probe') {
       const u = url.searchParams.get('u') || '';
       let h = ''; try { h = new URL(u).hostname; } catch {}
-      if (!/(^|\.)(google\.com|bing\.com|gdeltproject\.org|duckduckgo\.com|nrk\.no|yahoo\.com|startpage\.com|brave\.com|qwant\.com|mojeek\.com)$/.test(h)) return json({ error: 'host' }, 400, cors);
+      if (!/(^|\.)(google\.com|bing\.com|gdeltproject\.org|duckduckgo\.com|nrk\.no|yahoo\.com|startpage\.com|brave\.com|qwant\.com|mojeek\.com|tv2\.no|nettavisen\.no|dagbladet\.no|abcnyheter\.no|guardianapis\.com|theguardian\.com|bbci\.co\.uk|bbc\.co\.uk|vg\.no|e24\.no|ntb\.no|msn\.com|reuters\.com|apnews\.com)$/.test(h)) return json({ error: 'host' }, 400, cors);
       const headers = {};
       if (url.searchParams.get('ua') !== '0') headers['User-Agent'] = url.searchParams.get('ua') === 'bot' ? 'SammeSak/1.0 (+https://khalm.github.io/SammeSak/)' : UA;
       if (url.searchParams.get('c') === '1') headers['Cookie'] = 'CONSENT=YES+cb.20240101-00-p0.en+FX+999; SOCS=CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg';
